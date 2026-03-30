@@ -231,7 +231,7 @@ export interface SshConfigHostEntry {
   hostName?: string;
   user?: string;
   port?: number;
-  hasIdentityFile: boolean;
+  identityFiles?: string[];
 }
 
 /**

@@ -389,23 +389,14 @@ export class SshConnectionManager extends EventEmitter {
   private async resolveAutoAuth(
     sshConfig: SshConfigHostEntry | null
   ): Promise<{ privateKey?: string; agent?: string }> {
-    // Try SSH config identity file
-    if (sshConfig?.hasIdentityFile) {
-      const resolved = await this.configParser.resolveHost(sshConfig.alias);
-      if (resolved) {
-        // The config parser already told us there's an identity file.
-        // Try common identity file locations from config
-        const configKeyPaths = [
-          path.join(os.homedir(), '.ssh', 'id_ed25519'),
-          path.join(os.homedir(), '.ssh', 'id_rsa'),
-        ];
-        for (const keyPath of configKeyPaths) {
-          try {
-            const keyData = await fs.promises.readFile(keyPath, 'utf8');
-            return { privateKey: keyData };
-          } catch {
-            // Try next
-          }
+    // Try identity files from SSH config
+    if (sshConfig?.identityFiles && sshConfig.identityFiles.length > 0) {
+      for (const keyPath of sshConfig.identityFiles) {
+        try {
+          const keyData = await fs.promises.readFile(keyPath, 'utf8');
+          return { privateKey: keyData };
+        } catch {
+          // Try next
         }
       }
     }

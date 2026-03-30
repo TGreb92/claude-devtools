@@ -70,7 +70,7 @@ export class SshConfigParser {
       const resolved = this.resolveFromConfig(config, alias);
 
       // If nothing was resolved beyond the alias itself, check if host was actually defined
-      if (!resolved.hostName && !resolved.user && !resolved.port && !resolved.hasIdentityFile) {
+      if (!resolved.hostName && !resolved.user && !resolved.port && !resolved.identityFiles?.length) {
         // Check if there's an explicit Host entry for this alias
         const hasEntry = config.some(
           (section) =>
@@ -102,17 +102,19 @@ export class SshConfigParser {
     const user = Array.isArray(rawUser) ? rawUser[0] : (rawUser ?? undefined);
     const portStr = computed.Port;
     const port = portStr ? parseInt(String(portStr), 10) : undefined;
-    const identityFile = computed.IdentityFile;
-    const hasIdentityFile = Array.isArray(identityFile)
-      ? identityFile.length > 0
-      : identityFile != null;
+    // Resolve identity file paths (expand ~ to home directory)
+    const rawIdentityFile = computed.IdentityFile;
+    const rawFiles = Array.isArray(rawIdentityFile) ? rawIdentityFile : rawIdentityFile != null ? [rawIdentityFile] : [];
+    const identityFiles = rawFiles
+      .filter((f): f is string => typeof f === 'string')
+      .map((f) => f.replace(/^~/, os.homedir()));
 
     return {
       alias,
       hostName: hostName && hostName !== alias ? hostName : undefined,
       user,
       port: port && port !== 22 ? port : undefined,
-      hasIdentityFile,
+      identityFiles: identityFiles.length > 0 ? identityFiles : undefined,
     };
   }
 
