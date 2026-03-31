@@ -1070,9 +1070,6 @@ export class ProjectScanner {
     for (const key of this.sessionMetadataCache.keys()) {
       if (key.startsWith(prefix)) this.sessionMetadataCache.delete(key);
     }
-    for (const key of this.sessionPreviewCache.keys()) {
-      if (key.startsWith(prefix)) this.sessionPreviewCache.delete(key);
-    }
   }
 
   /**

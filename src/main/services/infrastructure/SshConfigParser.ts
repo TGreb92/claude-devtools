@@ -107,7 +107,7 @@ export class SshConfigParser {
     const rawFiles = Array.isArray(rawIdentityFile) ? rawIdentityFile : rawIdentityFile != null ? [rawIdentityFile] : [];
     const identityFiles = rawFiles
       .filter((f): f is string => typeof f === 'string')
-      .map((f) => f.replace(/^~/, os.homedir()));
+      .map((f) => f.replace(/^~(?=$|\/|\\)/, os.homedir()));
 
     return {
       alias,

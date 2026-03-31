@@ -268,7 +268,7 @@ export class SshConnectionManager extends EventEmitter {
 
       case 'privateKey': {
         const rawKeyPath = config.privateKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa');
-        const keyPath = rawKeyPath.replace(/^~/, os.homedir());
+        const keyPath = rawKeyPath.replace(/^~(?=$|\/|\\)/, os.homedir());
         try {
           const keyData = await fs.promises.readFile(keyPath, 'utf8');
           connectConfig.privateKey = keyData;
