@@ -260,6 +260,9 @@ export class CopilotProjectScanner {
       createdAt = meta.createdAt ? new Date(meta.createdAt).getTime() : Date.now();
     }
 
+    // Quick scan for message count and subagent presence
+    const { messageCount, hasSubagents } = await this.quickScanEvents(eventsPath);
+
     return {
       id: sessionId,
       projectId,
@@ -267,11 +270,31 @@ export class CopilotProjectScanner {
       createdAt,
       firstMessage: meta.summary ?? undefined,
       messageTimestamp: meta.createdAt,
-      hasSubagents: false, // Will be updated when parsing
-      messageCount: 0, // Will be updated when parsing
+      hasSubagents,
+      messageCount,
       gitBranch: meta.branch,
       metadataLevel: 'light',
     };
+  }
+
+  private async quickScanEvents(
+    eventsPath: string
+  ): Promise<{ messageCount: number; hasSubagents: boolean }> {
+    try {
+      const content = await fs.promises.readFile(eventsPath, 'utf-8');
+      let messageCount = 0;
+      let hasSubagents = false;
+
+      for (const line of content.split('\n')) {
+        if (line.includes('"user.message"')) messageCount++;
+        else if (line.includes('"assistant.message"')) messageCount++;
+        else if (line.includes('"subagent.started"')) hasSubagents = true;
+      }
+
+      return { messageCount, hasSubagents };
+    } catch {
+      return { messageCount: 0, hasSubagents: false };
+    }
   }
 
   /**
