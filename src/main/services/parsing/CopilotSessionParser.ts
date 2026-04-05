@@ -179,6 +179,15 @@ function convertEventsToMessages(events: CopilotEvent[]): ParsedMessage[] {
           subagentStarts,
           messageIndex++
         );
+
+        // Set model from the first tool.execution_complete for this turn
+        if (!assistantMsg.model && assistantEvent.data.toolRequests.length > 0) {
+          const firstToolResult = toolResults.get(assistantEvent.data.toolRequests[0].toolCallId);
+          if (firstToolResult?.data.model) {
+            assistantMsg.model = firstToolResult.data.model;
+          }
+        }
+
         messages.push(assistantMsg);
 
         // If this assistant message has tool calls, generate a tool-result
@@ -289,7 +298,13 @@ function buildAssistantMessage(
     timestamp: new Date(event.timestamp),
     role: 'assistant',
     content: contentBlocks,
-    model: undefined, // Model info comes from tool.execution_complete or session.shutdown
+    usage: event.data.outputTokens
+      ? {
+          input_tokens: 0,
+          output_tokens: event.data.outputTokens,
+        }
+      : undefined,
+    model: undefined,
     cwd: context.cwd,
     gitBranch: context.branch,
     isSidechain: false,

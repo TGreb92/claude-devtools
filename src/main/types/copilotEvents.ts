@@ -131,6 +131,8 @@ export interface CopilotAssistantMessageEvent extends CopilotBaseEvent {
     toolRequests: CopilotToolRequest[];
     interactionId: string;
     reasoningOpaque?: string;
+    reasoningText?: string;
+    outputTokens?: number;
   };
 }
 
