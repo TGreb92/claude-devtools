@@ -360,6 +360,8 @@ async function startHttpServer(
         dataCache: activeContext.dataCache,
         updaterService,
         sshConnectionManager,
+        copilotScanner: activeContext.copilotScanner,
+        copilotParser: activeContext.copilotParser,
       },
       modeSwitchHandler,
       config.httpServer?.port ?? 3456

@@ -327,3 +327,60 @@ export function getProjectsBasePath(): string {
 export function getTodosBasePath(): string {
   return path.join(getClaudeBasePath(), 'todos');
 }
+
+// =============================================================================
+// Copilot CLI Path Helpers
+// =============================================================================
+
+/** Prefix used to distinguish Copilot CLI project IDs from Claude Code project IDs. */
+export const COPILOT_PROJECT_PREFIX = 'copilot::';
+
+/**
+ * Get the Copilot CLI config base path (~/.copilot).
+ */
+export function getCopilotBasePath(): string {
+  return path.join(getHomeDir(), '.copilot');
+}
+
+/**
+ * Get the Copilot CLI session-state directory (~/.copilot/session-state).
+ */
+export function getCopilotSessionStatePath(): string {
+  return path.join(getCopilotBasePath(), 'session-state');
+}
+
+/**
+ * Check whether a project ID represents a Copilot CLI project.
+ */
+export function isCopilotProject(projectId: string): boolean {
+  return projectId.startsWith(COPILOT_PROJECT_PREFIX);
+}
+
+/**
+ * Build a Copilot CLI project ID from an encoded cwd path.
+ */
+export function buildCopilotProjectId(encodedCwd: string): string {
+  return `${COPILOT_PROJECT_PREFIX}${encodedCwd}`;
+}
+
+/**
+ * Extract the encoded cwd from a Copilot CLI project ID.
+ * Returns the portion after 'copilot::'.
+ */
+export function parseCopilotProjectId(projectId: string): string {
+  return projectId.slice(COPILOT_PROJECT_PREFIX.length);
+}
+
+/**
+ * Construct the path to a Copilot CLI session's events.jsonl file.
+ */
+export function buildCopilotEventsPath(sessionStatePath: string, sessionId: string): string {
+  return path.join(sessionStatePath, sessionId, 'events.jsonl');
+}
+
+/**
+ * Construct the path to a Copilot CLI session's workspace.yaml file.
+ */
+export function buildCopilotWorkspacePath(sessionStatePath: string, sessionId: string): string {
+  return path.join(sessionStatePath, sessionId, 'workspace.yaml');
+}

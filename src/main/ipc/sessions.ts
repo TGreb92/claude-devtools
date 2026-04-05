@@ -9,6 +9,7 @@
  * - get-session-metrics: Get metrics for a session
  */
 
+import { isCopilotProject } from '@main/utils/pathDecoder';
 import { createLogger } from '@shared/utils/logger';
 import { type IpcMain, type IpcMainInvokeEvent } from 'electron';
 
@@ -89,8 +90,15 @@ async function handleGetSessions(
       return [];
     }
 
-    const { projectScanner } = registry.getActive();
-    const sessions = await projectScanner.listSessions(validatedProject.value!);
+    const ctx = registry.getActive();
+    const safeProjectId = validatedProject.value!;
+
+    // Route to Copilot scanner for copilot:: prefixed projects
+    if (isCopilotProject(safeProjectId) && ctx.copilotScanner) {
+      return ctx.copilotScanner.listSessions(safeProjectId);
+    }
+
+    const sessions = await ctx.projectScanner.listSessions(safeProjectId);
     return sessions;
   } catch (error) {
     logger.error(`Error in get-sessions for project ${projectId}:`, error);
@@ -118,10 +126,23 @@ async function handleGetSessionsPaginated(
       return { sessions: [], nextCursor: null, hasMore: false, totalCount: 0 };
     }
 
-    const { projectScanner } = registry.getActive();
+    const ctx = registry.getActive();
+    const safeProjectId = validatedProject.value!;
+
+    // Route to Copilot scanner for copilot:: prefixed projects
+    if (isCopilotProject(safeProjectId) && ctx.copilotScanner) {
+      const sessions = await ctx.copilotScanner.listSessions(safeProjectId);
+      return {
+        sessions,
+        nextCursor: null,
+        hasMore: false,
+        totalCount: sessions.length,
+      };
+    }
+
     const safeLimit = coercePageLimit(limit, 20);
-    const result = await projectScanner.listSessionsPaginated(
-      validatedProject.value!,
+    const result = await ctx.projectScanner.listSessionsPaginated(
+      safeProjectId,
       cursor,
       safeLimit,
       options
@@ -210,22 +231,45 @@ async function handleGetSessionDetail(
       return null;
     }
 
-    const { projectScanner, sessionParser, subagentResolver, chunkBuilder, dataCache } =
-      registry.getActive();
-
+    const ctx = registry.getActive();
     const safeProjectId = validatedProject.value!;
     const safeSessionId = validatedSession.value!;
     const cacheKey = DataCache.buildKey(safeProjectId, safeSessionId);
 
     // Check cache first
-    let sessionDetail = dataCache.get(cacheKey);
+    let sessionDetail = ctx.dataCache.get(cacheKey);
 
     if (sessionDetail) {
       return sessionDetail;
     }
 
+    // Route to Copilot parser for copilot:: prefixed projects
+    if (isCopilotProject(safeProjectId) && ctx.copilotScanner && ctx.copilotParser) {
+      const session = await ctx.copilotScanner.getSession(safeProjectId, safeSessionId);
+      if (!session) {
+        logger.error(`Copilot session not found: ${sessionId}`);
+        return null;
+      }
+
+      const eventsPath = ctx.copilotScanner.getEventsPath(safeSessionId);
+      const { parsed: parsedSession, subagents } =
+        await ctx.copilotParser.parseSessionFileWithSubagents(eventsPath);
+      session.hasSubagents = subagents.length > 0;
+
+      sessionDetail = ctx.chunkBuilder.buildSessionDetail(
+        session,
+        parsedSession.messages,
+        subagents
+      );
+
+      ctx.dataCache.set(cacheKey, sessionDetail);
+      return sessionDetail;
+    }
+
+    // Standard Claude Code path
+    const { projectScanner, sessionParser, subagentResolver, chunkBuilder, dataCache } = ctx;
+
     const fsType = projectScanner.getFileSystemProvider().type;
-    // In SSH mode, avoid an extra deep metadata scan before full parse.
     const session = await projectScanner.getSessionWithOptions(safeProjectId, safeSessionId, {
       metadataLevel: fsType === 'ssh' ? 'light' : 'deep',
     });
@@ -278,9 +322,20 @@ async function handleGetSessionGroups(
       );
       return [];
     }
-    const { sessionParser, subagentResolver, chunkBuilder } = registry.getActive();
+    const ctx = registry.getActive();
     const safeProjectId = validatedProject.value!;
     const safeSessionId = validatedSession.value!;
+
+    // Route to Copilot parser for copilot:: prefixed projects
+    if (isCopilotProject(safeProjectId) && ctx.copilotScanner && ctx.copilotParser) {
+      const eventsPath = ctx.copilotScanner.getEventsPath(safeSessionId);
+      const { parsed: parsedSession, subagents } =
+        await ctx.copilotParser.parseSessionFileWithSubagents(eventsPath);
+      return ctx.chunkBuilder.buildGroups(parsedSession.messages, subagents);
+    }
+
+    // Standard Claude Code path
+    const { sessionParser, subagentResolver, chunkBuilder } = ctx;
 
     // Parse session messages
     const parsedSession = await sessionParser.parseSession(safeProjectId, safeSessionId);

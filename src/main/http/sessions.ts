@@ -10,6 +10,7 @@
  * - GET /api/projects/:projectId/sessions/:sessionId/waterfall - Waterfall data
  */
 
+import { isCopilotProject } from '@main/utils/pathDecoder';
 import { createLogger } from '@shared/utils/logger';
 
 import { coercePageLimit, validateProjectId, validateSessionId } from '../ipc/guards';
@@ -33,7 +34,14 @@ export function registerSessionRoutes(app: FastifyInstance, services: HttpServic
           return [];
         }
 
-        const sessions = await services.projectScanner.listSessions(validated.value!);
+        const safeProjectId = validated.value!;
+
+        // Route to Copilot scanner for copilot:: prefixed projects
+        if (isCopilotProject(safeProjectId) && services.copilotScanner) {
+          return services.copilotScanner.listSessions(safeProjectId);
+        }
+
+        const sessions = await services.projectScanner.listSessions(safeProjectId);
         return sessions;
       } catch (error) {
         logger.error(`Error in GET sessions for ${request.params.projectId}:`, error);
@@ -160,8 +168,31 @@ export function registerSessionRoutes(app: FastifyInstance, services: HttpServic
           return sessionDetail;
         }
 
+        // Route to Copilot parser for copilot:: prefixed projects
+        if (isCopilotProject(safeProjectId) && services.copilotScanner && services.copilotParser) {
+          const session = await services.copilotScanner.getSession(safeProjectId, safeSessionId);
+          if (!session) {
+            logger.error(`Copilot session not found: ${safeSessionId}`);
+            return null;
+          }
+
+          const eventsPath = services.copilotScanner.getEventsPath(safeSessionId);
+          const { parsed: parsedSession, subagents } =
+            await services.copilotParser.parseSessionFileWithSubagents(eventsPath);
+          session.hasSubagents = subagents.length > 0;
+
+          sessionDetail = services.chunkBuilder.buildSessionDetail(
+            session,
+            parsedSession.messages,
+            subagents
+          );
+
+          services.dataCache.set(cacheKey, sessionDetail);
+          return sessionDetail;
+        }
+
+        // Standard Claude Code path
         const fsType = services.projectScanner.getFileSystemProvider().type;
-        // In SSH mode, avoid an extra deep metadata scan before full parse.
         const session = await services.projectScanner.getSessionWithOptions(
           safeProjectId,
           safeSessionId,

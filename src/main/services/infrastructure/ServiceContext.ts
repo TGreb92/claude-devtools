@@ -12,15 +12,19 @@
  */
 
 import { ChunkBuilder } from '@main/services/analysis/ChunkBuilder';
+import { CopilotProjectScanner } from '@main/services/discovery/CopilotProjectScanner';
 import { ProjectScanner } from '@main/services/discovery/ProjectScanner';
 import { SubagentResolver } from '@main/services/discovery/SubagentResolver';
+import { CopilotSessionParser } from '@main/services/parsing/CopilotSessionParser';
 import { SessionParser } from '@main/services/parsing/SessionParser';
+import { getCopilotSessionStatePath } from '@main/utils/pathDecoder';
 import {
   CACHE_CLEANUP_INTERVAL_MINUTES,
   CACHE_TTL_MINUTES,
   MAX_CACHE_SESSIONS,
 } from '@shared/constants';
 import { createLogger } from '@shared/utils/logger';
+import * as fs from 'fs';
 
 import { DataCache } from './DataCache';
 import { FileWatcher } from './FileWatcher';
@@ -75,7 +79,13 @@ export class ServiceContext {
   readonly dataCache: DataCache;
   readonly fileWatcher: FileWatcher;
 
+  // Copilot CLI services (optional — only created for local contexts)
+  readonly copilotScanner?: CopilotProjectScanner;
+  readonly copilotParser?: CopilotSessionParser;
+
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private copilotWatcher: fs.FSWatcher | null = null;
+  private copilotDebounceTimer: NodeJS.Timeout | null = null;
   private disposed = false;
 
   constructor(config: ServiceContextConfig) {
@@ -116,6 +126,13 @@ export class ServiceContext {
     );
     this.fileWatcher.setProjectScanner(this.projectScanner);
 
+    // 7. Copilot CLI services (local contexts only — SSH doesn't access Copilot sessions)
+    if (config.type === 'local') {
+      this.copilotScanner = new CopilotProjectScanner();
+      this.copilotParser = new CopilotSessionParser();
+      logger.info('Copilot CLI services initialized');
+    }
+
     logger.info(`ServiceContext created: ${config.id}`);
   }
 
@@ -136,6 +153,11 @@ export class ServiceContext {
 
     // Start cache auto-cleanup
     this.cleanupInterval = this.dataCache.startAutoCleanup(CACHE_CLEANUP_INTERVAL_MINUTES);
+
+    // Start Copilot session-state watcher
+    if (this.copilotScanner) {
+      this.startCopilotWatcher();
+    }
   }
 
   /**
@@ -145,6 +167,7 @@ export class ServiceContext {
   stopFileWatcher(): void {
     logger.info(`Stopping FileWatcher for context: ${this.id}`);
     this.fileWatcher.stop();
+    this.stopCopilotWatcher();
   }
 
   /**
@@ -158,6 +181,9 @@ export class ServiceContext {
 
     logger.info(`Starting FileWatcher for context: ${this.id}`);
     this.fileWatcher.start();
+    if (this.copilotScanner) {
+      this.startCopilotWatcher();
+    }
   }
 
   /**
@@ -174,6 +200,9 @@ export class ServiceContext {
 
     // Stop and dispose FileWatcher
     this.fileWatcher.dispose();
+
+    // Stop Copilot watcher
+    this.stopCopilotWatcher();
 
     // Dispose DataCache
     this.dataCache.dispose();
@@ -194,5 +223,63 @@ export class ServiceContext {
    */
   isDisposed(): boolean {
     return this.disposed;
+  }
+
+  // ===========================================================================
+  // Copilot Session Watcher
+  // ===========================================================================
+
+  private startCopilotWatcher(): void {
+    if (this.copilotWatcher) return;
+
+    const copilotPath = getCopilotSessionStatePath();
+    if (!fs.existsSync(copilotPath)) return;
+
+    try {
+      this.copilotWatcher = fs.watch(copilotPath, { recursive: true }, (_eventType, filename) => {
+        if (!filename) return;
+        const parts = filename.replace(/\\/g, '/').split('/');
+        const basename = parts.pop() ?? '';
+        if (basename !== 'events.jsonl' && basename !== 'workspace.yaml') return;
+
+        // Extract session UUID from path (e.g., "{uuid}/events.jsonl")
+        const sessionId = parts[0];
+
+        // Debounce
+        if (this.copilotDebounceTimer) {
+          clearTimeout(this.copilotDebounceTimer);
+        }
+        this.copilotDebounceTimer = setTimeout(() => {
+          this.copilotDebounceTimer = null;
+          // Clear caches
+          this.copilotScanner?.clearCache();
+          this.dataCache.clear();
+          // Emit a proper FileChangeEvent so the renderer refreshes
+          this.fileWatcher.emit('file-change', {
+            type: basename === 'workspace.yaml' ? 'add' : 'change',
+            path: copilotPath,
+            sessionId: sessionId ?? undefined,
+            isSubagent: false,
+          });
+        }, 500);
+      });
+
+      this.copilotWatcher.on('error', () => {
+        this.stopCopilotWatcher();
+      });
+    } catch {
+      // Directory may become unavailable — not critical
+    }
+  }
+
+  private stopCopilotWatcher(): void {
+    if (this.copilotWatcher) {
+      this.copilotWatcher.close();
+      this.copilotWatcher = null;
+    }
+    if (this.copilotDebounceTimer) {
+      clearTimeout(this.copilotDebounceTimer);
+      this.copilotDebounceTimer = null;
+    }
   }
 }

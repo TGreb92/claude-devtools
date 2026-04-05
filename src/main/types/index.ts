@@ -22,3 +22,6 @@ export * from './messages';
 
 // Chunk and visualization types
 export * from './chunks';
+
+// Copilot CLI event types
+export * from './copilotEvents';

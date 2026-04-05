@@ -249,7 +249,7 @@ export class SubagentResolver {
       const taskCall = taskCallById.get(taskCallId);
       if (!taskCall) continue;
 
-      this.enrichSubagentFromTask(subagent, taskCall);
+      this.enrichSubagentFromTask(subagent, taskCall, messages);
       matchedSubagentIds.add(subagent.id);
       matchedTaskIds.add(taskCallId);
     }
@@ -288,7 +288,7 @@ export class SubagentResolver {
         }
 
         if (bestMatch) {
-          this.enrichSubagentFromTask(bestMatch, taskCall);
+          this.enrichSubagentFromTask(bestMatch, taskCall, messages);
           matchedSubagentIds.add(bestMatch.id);
           matchedTaskIds.add(taskCall.id);
         }
@@ -304,7 +304,7 @@ export class SubagentResolver {
     );
 
     for (let i = 0; i < unmatchedSubagents.length && i < unmatchedTasks.length; i++) {
-      this.enrichSubagentFromTask(unmatchedSubagents[i], unmatchedTasks[i]);
+      this.enrichSubagentFromTask(unmatchedSubagents[i], unmatchedTasks[i], messages);
     }
   }
 
@@ -312,11 +312,30 @@ export class SubagentResolver {
    * Enrich a subagent with metadata from its parent Task call.
    * Intentionally mutates the subagent in place for consistency with other resolution methods.
    */
-  private enrichSubagentFromTask(subagent: Process, taskCall: ToolCall): void {
+  private enrichSubagentFromTask(
+    subagent: Process,
+    taskCall: ToolCall,
+    messages?: ParsedMessage[]
+  ): void {
     /* eslint-disable no-param-reassign -- Mutation is intentional; subagent is enriched in place */
     subagent.parentTaskId = taskCall.id;
     subagent.description = taskCall.taskDescription;
+    subagent.prompt = taskCall.input?.prompt as string | undefined;
     subagent.subagentType = taskCall.taskSubagentType;
+
+    // Extract result from the tool_result message matching this Task call
+    if (messages) {
+      for (const msg of messages) {
+        const toolResult = msg.toolResults.find((tr) => tr.toolUseId === taskCall.id);
+        if (toolResult) {
+          subagent.result =
+            typeof toolResult.content === 'string'
+              ? toolResult.content
+              : JSON.stringify(toolResult.content);
+          break;
+        }
+      }
+    }
 
     // Extract team metadata from Task call input
     const teamName = taskCall.input?.team_name as string | undefined;

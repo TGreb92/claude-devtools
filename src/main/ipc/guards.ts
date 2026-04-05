@@ -7,6 +7,7 @@
  */
 
 import { isValidProjectId } from '@main/utils/pathDecoder';
+import { isCopilotProject } from '@main/utils/pathDecoder';
 
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 const SUBAGENT_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
@@ -48,6 +49,11 @@ export function validateProjectId(projectId: unknown): ValidationResult<string> 
   const basic = validateString(projectId, 'projectId');
   if (!basic.valid) {
     return basic;
+  }
+
+  // Accept copilot:: prefixed project IDs
+  if (isCopilotProject(basic.value!)) {
+    return { valid: true, value: basic.value };
   }
 
   if (!isValidProjectId(basic.value!)) {

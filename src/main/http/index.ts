@@ -21,6 +21,8 @@ import { registerValidationRoutes } from './validation';
 
 import type {
   ChunkBuilder,
+  CopilotProjectScanner,
+  CopilotSessionParser,
   DataCache,
   ProjectScanner,
   SessionParser,
@@ -40,6 +42,8 @@ export interface HttpServices {
   dataCache: DataCache;
   updaterService: UpdaterService;
   sshConnectionManager: SshConnectionManager;
+  copilotScanner?: CopilotProjectScanner;
+  copilotParser?: CopilotSessionParser;
 }
 
 export function registerHttpRoutes(

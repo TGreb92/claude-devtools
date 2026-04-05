@@ -214,6 +214,22 @@ export function initializeNotificationListeners(): () => void {
 
       const state = useStore.getState();
       const selectedProjectId = state.selectedProjectId;
+
+      // Copilot CLI events arrive without projectId — re-fetch project list
+      // so new projects from new cwds appear in the sidebar.
+      if (!event.projectId) {
+        void state.fetchRepositoryGroups();
+        // Also refresh sessions for the selected project if it's a Copilot project
+        if (selectedProjectId?.startsWith('copilot::')) {
+          scheduleProjectRefresh(selectedProjectId);
+        }
+        // Refresh the active session view if viewing a Copilot session
+        if (event.sessionId && selectedProjectId) {
+          scheduleSessionRefresh(selectedProjectId, event.sessionId);
+        }
+        return;
+      }
+
       const selectedProjectBaseId = getBaseProjectId(selectedProjectId);
       const eventProjectBaseId = getBaseProjectId(event.projectId);
       const matchesSelectedProject =

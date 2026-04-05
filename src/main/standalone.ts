@@ -155,6 +155,8 @@ async function start(): Promise<void> {
     dataCache: localContext.dataCache,
     updaterService: updaterServiceStub,
     sshConnectionManager: sshConnectionManagerStub,
+    copilotScanner: localContext.copilotScanner,
+    copilotParser: localContext.copilotParser,
   };
 
   // No-op mode switch handler (no SSH in standalone)

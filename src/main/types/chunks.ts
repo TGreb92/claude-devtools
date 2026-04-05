@@ -40,6 +40,10 @@ export interface Process {
   metrics: SessionMetrics;
   /** Task description from parent Task call */
   description?: string;
+  /** Full prompt given to the subagent */
+  prompt?: string;
+  /** Result/output returned by the subagent */
+  result?: string;
   /** Subagent type from Task call (e.g., "Explore", "Plan") */
   subagentType?: string;
   /** Whether executed in parallel with other subagents */

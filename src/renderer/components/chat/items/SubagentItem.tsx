@@ -57,6 +57,61 @@ interface SubagentItemProps {
 }
 
 // =============================================================================
+// Collapsible Text Block (for prompt / result)
+// =============================================================================
+
+const CollapsibleTextBlock: React.FC<{ label: string; content?: string }> = ({
+  label,
+  content,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (!content) return null;
+
+  return (
+    <div className="pt-1">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center gap-1 text-left"
+      >
+        <ChevronRight
+          className={`size-3 shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+          style={{ color: CARD_ICON_MUTED }}
+        />
+        <span
+          className="text-[10px] font-semibold uppercase tracking-wider"
+          style={{ color: CARD_ICON_MUTED }}
+        >
+          {label}
+        </span>
+        {!isOpen && (
+          <span
+            className="ml-1 truncate text-[10px]"
+            style={{ color: CARD_TEXT_LIGHTER, maxWidth: '300px' }}
+          >
+            {content.slice(0, 80)}
+            {content.length > 80 ? '…' : ''}
+          </span>
+        )}
+      </button>
+      {isOpen && (
+        <div
+          className="mt-1 max-h-[300px] overflow-y-auto whitespace-pre-wrap rounded-md p-2 font-mono text-[11px] leading-relaxed"
+          style={{
+            backgroundColor: 'rgba(0,0,0,0.15)',
+            color: CARD_TEXT_LIGHT,
+            border: CARD_BORDER_STYLE,
+          }}
+        >
+          {content}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =============================================================================
 // Main Component - Linear-style DevTools Card
 // =============================================================================
 
@@ -409,6 +464,14 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({
               </span>
             </span>
           </div>
+
+          {/* ========== Row 1b: Prompt & Result (collapsible) ========== */}
+          {(subagent.prompt || subagent.result) && (
+            <CollapsibleTextBlock label="Prompt" content={subagent.prompt} />
+          )}
+          {(subagent.prompt || subagent.result) && (
+            <CollapsibleTextBlock label="Result" content={subagent.result} />
+          )}
 
           {/* ========== Row 2: Context Usage (Clean List) ========== */}
           {(hasMainImpact ?? hasIsolated) && (

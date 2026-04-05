@@ -10,6 +10,7 @@
 
 export * from './AgentConfigReader';
 export * from './ClaudeMdReader';
+export * from './CopilotSessionParser';
 export * from './GitIdentityResolver';
 export * from './MessageClassifier';
 export * from './SessionParser';

@@ -56,13 +56,24 @@ export function removeProjectHandlers(ipcMain: IpcMain): void {
 
 /**
  * Handler for 'get-projects' IPC call.
- * Lists all projects from ~/.claude/projects/
+ * Lists all projects from ~/.claude/projects/ and ~/.copilot/session-state/
  */
 async function handleGetProjects(_event: IpcMainInvokeEvent): Promise<Project[]> {
   try {
-    const { projectScanner } = registry.getActive();
-    const projects = await projectScanner.scan();
-    return projects;
+    const ctx = registry.getActive();
+    const claudeProjects = await ctx.projectScanner.scan();
+
+    // Merge Copilot CLI projects if available
+    if (ctx.copilotScanner) {
+      try {
+        const copilotProjects = await ctx.copilotScanner.scan();
+        return [...claudeProjects, ...copilotProjects];
+      } catch (error) {
+        logger.error('Error scanning Copilot projects (continuing with Claude only):', error);
+      }
+    }
+
+    return claudeProjects;
   } catch (error) {
     logger.error('Error in get-projects:', error);
     return [];
@@ -76,8 +87,39 @@ async function handleGetProjects(_event: IpcMainInvokeEvent): Promise<Project[]>
  */
 async function handleGetRepositoryGroups(_event: IpcMainInvokeEvent): Promise<RepositoryGroup[]> {
   try {
-    const { projectScanner } = registry.getActive();
-    const groups = await projectScanner.scanWithWorktreeGrouping();
+    const ctx = registry.getActive();
+    const groups = await ctx.projectScanner.scanWithWorktreeGrouping();
+
+    // Merge Copilot CLI projects as repository groups
+    if (ctx.copilotScanner) {
+      try {
+        const copilotProjects = await ctx.copilotScanner.scan();
+        for (const project of copilotProjects) {
+          groups.push({
+            id: project.id,
+            identity: null,
+            worktrees: [
+              {
+                id: project.id,
+                path: project.path,
+                name: project.name,
+                sessions: project.sessions,
+                createdAt: project.createdAt,
+                mostRecentSession: project.mostRecentSession,
+                isMainWorktree: true,
+                source: 'unknown' as const,
+              },
+            ],
+            name: project.name,
+            mostRecentSession: project.mostRecentSession,
+            totalSessions: project.sessions.length,
+          });
+        }
+      } catch (error) {
+        logger.error('Error scanning Copilot projects for repository groups:', error);
+      }
+    }
+
     return groups;
   } catch (error) {
     logger.error('Error in get-repository-groups:', error);
